@@ -1,0 +1,796 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Purplle | QC Module — Inbound GR & Quality Control</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<style>
+  :root{
+    --purplle:#662d91; --purplle-light:#f3e5f5; --purplle-dark:#4a148c;
+    --accent:#e91e63; --bg:#f6f5f8; --ink:#2b2540; --muted:#7a7390;
+    /* 5-colour QC state code (BRD 5.4) */
+    --st-pending:#e9e7ee; --st-progress:#f9c74f; --st-disc:#e24b4a;
+    --st-qc:#43a047; --st-grn:#9e9e9e; --st-err:#e24b4a;
+  }
+  *{scrollbar-width:thin}
+  body{background:var(--bg); font-family:'Segoe UI',Tahoma,sans-serif; color:var(--ink); padding-bottom:120px; overflow-y:auto!important;}
+  .navbar{background:var(--purplle); border-bottom:3px solid var(--accent);}
+  .navbar .brand{font-weight:700; color:#fff; letter-spacing:.2px;}
+  .navbar .sub{color:#e6d7f2; font-size:.72rem;}
+  .badge-ref{background:#fff; color:var(--purplle); font-weight:600;}
+
+  /* flow rail */
+  .rail{display:flex; gap:6px; flex-wrap:wrap; background:#fff; border-radius:12px; padding:10px 12px; box-shadow:0 2px 12px rgba(0,0,0,.05);}
+  .rail .step{flex:1 1 0; min-width:120px; display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; font-size:.78rem; color:var(--muted); background:#faf9fc; border:1px solid #eee;}
+  .rail .step .n{width:22px;height:22px;border-radius:50%;background:#e9e7ee;color:#8a8298;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.72rem;flex:0 0 auto;}
+  .rail .step.active{background:var(--purplle); color:#fff; border-color:var(--purplle);}
+  .rail .step.active .n{background:#fff;color:var(--purplle);}
+  .rail .step.done{background:#eaf5ea; color:#2e7d32; border-color:#cfe8cf;}
+  .rail .step.done .n{background:#43a047;color:#fff;}
+  .rail .step.skip{opacity:.45; text-decoration:line-through;}
+
+  .card-soft{background:#fff; border:none; border-radius:14px; box-shadow:0 3px 18px rgba(0,0,0,.05);}
+  .card-soft .card-header{background:transparent; border-bottom:1px solid #f0eef4; font-weight:600;}
+  .sect-title{font-size:.7rem; text-transform:uppercase; letter-spacing:.9px; color:var(--muted); font-weight:700;}
+  .scan{max-width:420px}
+  .scan .input-group-text{background:#fff; color:var(--purplle);}
+  table thead th{background:var(--purplle-light); color:var(--purplle-dark); font-size:.68rem; text-transform:uppercase; letter-spacing:.4px; border:none; padding:12px;}
+  table td{vertical-align:middle; padding:12px; font-size:.86rem; border-bottom:1px solid #f1eff5;}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:.72rem;font-weight:600;}
+  .st-pending{background:var(--st-pending);color:#5f5a6e}
+  .st-progress{background:#fdf1cf;color:#8a6d0b}
+  .st-disc{background:#fde3e3;color:#a32d2d}
+  .st-qc{background:#e3f3e3;color:#2e7d32}
+  .st-grn{background:#eeeeee;color:#616161}
+  .st-err{background:#fde3e3;color:#a32d2d}
+  .badge-green{background:#e3f3e3;color:#2e7d32;border:1px solid #cfe8cf}
+  .badge-phys{background:#fbeee0;color:#8a5a12;border:1px solid #f0dcc2}
+  .flag{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;font-size:.78rem;margin:3px 0;border:1px solid transparent}
+  .flag-block{background:#fde3e3;color:#a32d2d;border-color:#f3c1c1}
+  .flag-warn{background:#fdf1cf;color:#8a6d0b;border-color:#f0e0a8}
+  .flag-info{background:#e7eefb;color:#1e4b8f;border-color:#c9d9f4}
+  .flag-ok{background:#e3f3e3;color:#2e7d32;border-color:#cfe8cf}
+  .kpi{background:#faf9fc;border:1px solid #eee;border-radius:10px;padding:12px;text-align:center}
+  .kpi .v{font-size:1.4rem;font-weight:700;color:var(--purplle-dark)}
+  .kpi .l{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .prod-img{width:64px;height:64px;border-radius:10px;background:linear-gradient(135deg,#efeaf5,#e3d7ef);display:flex;align-items:center;justify-content:center;color:#a58fc0;font-size:1.4rem;flex:0 0 auto}
+  .box-row{background:#faf9fc;border:1px solid #eee;border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .box-row.sampled{background:#f2ecfa;border-color:#e0d2f2}
+  .box-row.fail{background:#fdf0f0;border-color:#f3c8c8}
+  .mini{width:78px}
+  .fixed-footer{position:fixed;bottom:22px;left:0;right:0;display:flex;justify-content:center;z-index:1000;pointer-events:none}
+  .fixed-footer .inner{pointer-events:auto;background:#fff;border-radius:50px;box-shadow:0 10px 30px rgba(102,45,145,.18);padding:8px 8px 8px 22px;display:flex;align-items:center;gap:14px;border:1px solid #efe9f5}
+  .btn-purplle{background:var(--purplle);color:#fff;border:none}
+  .btn-purplle:hover{background:var(--purplle-dark);color:#fff}
+  .btn-pill{border-radius:50px;padding:11px 30px;font-weight:600}
+  .disp-tile{border-radius:10px;padding:12px;color:#fff;text-align:center}
+  .d-tgdc{background:#2e7d32}.d-iwdc{background:#1565c0}.d-dmdc{background:#ef6c00}.d-rvdc{background:#c62828}
+  .note{font-size:.76rem;color:var(--muted)}
+  .blocker{font-size:.72rem;background:#fff8e1;border:1px dashed #e0b000;color:#7a5c00;border-radius:8px;padding:8px 10px}
+  .link-more{cursor:pointer;color:var(--purplle);font-weight:600;font-size:.8rem}
+  .hide{display:none!important}
+  @media (max-width:640px){ .rail .step{min-width:47%} }
+</style>
+</head>
+<body>
+
+<nav class="navbar px-3 px-md-4 py-2 shadow-sm">
+  <div class="container-fluid d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-clipboard-check text-white fs-4"></i>
+      <div>
+        <div class="brand">QC Module <span class="sub d-none d-md-inline">· Inbound GR & Quality Control · Manage</span></div>
+        <div class="sub d-md-none">Inbound GR & QC · Manage</div>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge badge-ref p-2" id="refBadge">No consignment</span>
+      <button class="btn btn-sm btn-light" data-bs-toggle="offcanvas" data-bs-target="#cfg" title="Config surface"><i class="bi bi-sliders"></i></button>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-3 px-md-4 mt-3" style="max-width:1180px">
+  <div class="rail mb-3" id="rail"></div>
+  <div id="workspace"></div>
+</div>
+
+<div class="fixed-footer"><div class="inner" id="footer"></div></div>
+
+<!-- Config surface -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="cfg">
+  <div class="offcanvas-header"><h6 class="mb-0"><i class="bi bi-sliders me-2"></i>Configuration surface</h6><button class="btn-close" data-bs-dismiss="offcanvas"></button></div>
+  <div class="offcanvas-body">
+    <p class="note">Governed knobs the module runs on (PRD §12). Changes recompute derived values live; eligibility re-evaluates for lines not yet started.</p>
+    <label class="form-label small fw-semibold">Sample percentage (%)</label>
+    <input type="number" class="form-control mb-3" id="c_samplePct" value="10" min="1" max="100">
+    <label class="form-label small fw-semibold">Sample cap (max boxes)</label>
+    <input type="number" class="form-control mb-3" id="c_sampleCap" value="5" min="1">
+    <label class="form-label small fw-semibold">Escalation threshold (% defect → 100%)</label>
+    <input type="number" class="form-control mb-3" id="c_escalationPct" value="20" min="1" max="100">
+    <label class="form-label small fw-semibold">Freshness criteria (min days to expiry)</label>
+    <input type="number" class="form-control mb-3" id="c_freshnessDays" value="90" min="1">
+    <label class="form-label small fw-semibold">Green-Channel eligibility threshold (vendor score)</label>
+    <input type="number" class="form-control mb-3" id="c_eligibility" value="80" min="0" max="100">
+    <button class="btn btn-purplle w-100" id="c_apply"><i class="bi bi-check2 me-1"></i>Apply configuration</button>
+    <hr>
+    <p class="note mb-0">Defaults per BRD: 10% sample, 20% escalation, freshness default-pass when SKU master is empty (reuses Freshness Check build).</p>
+  </div>
+</div>
+
+<!-- Multi-SKU shortlist modal -->
+<div class="modal fade" id="skuModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content card-soft">
+  <div class="modal-header"><h6 class="modal-title">Select SKU — EAN maps to multiple SKUs</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body" id="skuModalBody"></div>
+</div></div></div>
+
+<!-- Toasts -->
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toasts" style="z-index:1200"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/* ============================================================
+   QC MODULE PROTOTYPE — logic model (PRD v0.1 / BRD v1.0)
+   Single-file, in-memory. Panels: Intake → Worklist → Identity
+   → Sample → Receiving → Summary/GR (+ post-GR: inward, freshness).
+   ============================================================ */
+
+const CONFIG = { samplePct:10, sampleCap:5, escalationPct:20, freshnessDays:90, eligibility:80 };
+const today = new Date();
+const addMonths = (m)=>{ const d=new Date(today); d.setMonth(d.getMonth()+m); return d.toISOString().slice(0,10); };
+const daysBetween = (iso)=> Math.round((new Date(iso)-today)/86400000);
+
+/* ---------- seed consignments (three vendor scenarios) ---------- */
+function seedScenarios(){
+  return {
+    A:{ po:"4500098231", invoice:"INV-A-88123", vendor:{name:"Marico Ltd", configured:true, qrEnabled:true},
+        label:"QR-enabled vendor · mixed routing",
+        lines:[
+          line("MRC-PCO-200","8901234000011","Parachute Coconut Oil 200ml","💧",99,99,240,240,24,10,92),
+          line("MRC-LVN-100","8901234000028","Livon Silk Serum 100ml","✨",245,245,120,120,20,6,71),
+          line("MRC-SWG-250","8901234000035","Set Wet Hair Gel 250ml","🧴",180,175,110,120,24,5,64), // invoice MRP≠master, invoice qty>po
+          line("MRC-NIH-XXX","8901234500019","Nihar Naturals (multi-SKU EAN)","🥥",95,95,80,80,16,5,68,
+               [ {sku:"NIH-100",desc:"Nihar Naturals 100ml",mrp:55},
+                 {sku:"NIH-200",desc:"Nihar Naturals 200ml",mrp:95} ])
+        ]},
+    B:{ po:"4500077310", invoice:"INV-B-4471", vendor:{name:"Local Traders (non-QR)", configured:true, qrEnabled:false},
+        label:"QR-disabled vendor · UID-only, batch-centric",
+        lines:[
+          line("LT-FW-150","7001110000015","Herbal Face Wash 150ml","🧼",120,120,100,100,25,4,58),
+          line("LT-SH-500","7001110000022","Herbal Shampoo 500ml","🧴",210,210,100,100,20,5,61)
+        ]},
+    C:{ po:"4500000000", invoice:"INV-C-0001", vendor:{name:"Unregistered Vendor", configured:false, qrEnabled:false},
+        label:"Vendor config missing · Screen-0 hard block", lines:[] }
+  };
+}
+let SCN;
+
+function line(sku,ean,desc,img,masterMRP,invoiceMRP,poQty,invoiceQty,boxCount,boxQty,score,candidates){
+  return { id:sku, sku, ean, desc, img, masterMRP, invoiceMRP, poQty, invoiceQty, boxCount, boxQty, score,
+    candidates:candidates||null, chosen:!candidates,
+    eligible:false, path:null, qcStatus:"pending", inwardStatus:"", flags:[], physicalMRP:"", firstTouch:false, rekeyConfirmed:false,
+    batches:[], boxes:[], sampleSize:0, escalated:false, addedToSummary:false, selectedForGR:true, forceError:false,
+    gr:null };
+}
+
+let SESSION = null; // {scenarioKey, po, invoice, vendor, screen, currentLineId}
+
+/* ---------- helpers ---------- */
+const $ = (s,r=document)=>r.querySelector(s);
+const ws = ()=>$("#workspace");
+function toast(msg,kind="info"){
+  const icon = kind==="ok"?"check-circle-fill":kind==="err"?"exclamation-triangle-fill":"info-circle-fill";
+  const col = kind==="ok"?"#2e7d32":kind==="err"?"#c62828":"#662d91";
+  const t=document.createElement("div");
+  t.className="toast align-items-center show border-0 mb-2"; t.style.background="#fff";
+  t.innerHTML=`<div class="d-flex"><div class="toast-body d-flex align-items-center gap-2" style="color:${col}"><i class="bi bi-${icon}"></i><span>${msg}</span></div><button class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+  $("#toasts").appendChild(t); setTimeout(()=>t.remove(),3200);
+}
+const STATUS = {pending:["Pending","st-pending"],"in-progress":["In progress","st-progress"],discrepancy:["Discrepancy","st-disc"],"qc-completed":["QC completed","st-qc"],"grn-completed":["GRN completed","st-grn"]};
+const statusPill = s => `<span class="pill ${STATUS[s][1]}">${STATUS[s][0]}</span>`;
+const inwardPill = s => s==="inwarded"?`<span class="pill st-qc">Inwarded</span>`: s==="sap-error"?`<span class="pill st-err">SAP error</span>`: s==="gon-out"?`<span class="pill st-err">GON-out (RTV)</span>`: s==="rack-in"?`<span class="pill st-qc">Rack-in eligible</span>`:`<span class="text-muted small">—</span>`;
+
+function linePath(l,vendor){
+  if(!vendor.configured) return "block";
+  if(l.eligible) return "green";
+  return vendor.qrEnabled ? "physical-qr" : "physical-uid";
+}
+function evalEligibility(){
+  if(!SESSION) return;
+  SESSION.vendor && SCN[SESSION.scenarioKey].lines.forEach(l=>{
+    if(l.qcStatus==="pending" && !l.addedToSummary){
+      l.eligible = SESSION.vendor.qrEnabled && l.score>=CONFIG.eligibility;
+      l.path = linePath(l, SESSION.vendor);
+    }
+  });
+}
+const activeLines = ()=> SESSION ? SCN[SESSION.scenarioKey].lines : [];
+const getLine = id => activeLines().find(l=>l.id===id);
+const sampleSizeFor = l => Math.min(CONFIG.sampleCap, Math.max(1, Math.ceil(l.boxCount*CONFIG.samplePct/100)));
+const saleableOf = b => Math.max(0, (b.boxQty||0)-(b.short||0)+(b.excess||0)-(b.damaged||0)-(b.rtv||0));
+const boxIsDefective = b => (b.short>0||b.excess>0||b.damaged>0||b.rtv>0||b.labelFlag);
+function lineTotals(l){
+  let t={boxQty:0,saleable:0,short:0,excess:0,damaged:0,rtv:0,boxes:l.boxes.length};
+  l.boxes.forEach(b=>{ t.boxQty+=b.boxQty||0; t.saleable+=saleableOf(b); t.short+=b.short||0; t.excess+=b.excess||0; t.damaged+=b.damaged||0; t.rtv+=b.rtv||0; });
+  return t;
+}
+
+/* ============================================================
+   ROUTER
+   ============================================================ */
+function route(screen){ if(screen) SESSION.screen=screen; renderRail(); renderScreen(); renderFooter(); window.scrollTo({top:0,behavior:"smooth"}); }
+
+function renderRail(){
+  const steps=[["intake","Intake"],["worklist","Worklist"],["identity","Identity"],["sample","Sample QC"],["receiving","Receiving"],["summary","Summary & GR"]];
+  const order=steps.map(s=>s[0]); const cur=SESSION?SESSION.screen:"intake";
+  const l = SESSION && SESSION.currentLineId ? getLine(SESSION.currentLineId):null;
+  const skipQC = l && l.path==="green";
+  $("#rail").innerHTML = steps.map((s,i)=>{
+    let cls="step"; const idx=order.indexOf(s[0]); const curIdx=order.indexOf(cur);
+    if(s[0]===cur) cls+=" active"; else if(idx<curIdx) cls+=" done";
+    if(skipQC && (s[0]==="identity"||s[0]==="sample")) cls+=" skip";
+    const num = i===0?"0":i;
+    return `<div class="${cls}"><span class="n">${num}</span><span>${s[1]}</span></div>`;
+  }).join("");
+}
+
+function renderFooter(){
+  const f=$("#footer"); f.innerHTML=""; if(!SESSION) return;
+  const s=SESSION.screen;
+  const wrap=(label,html)=>`<span class="note d-none d-md-inline">${label}</span>${html}`;
+  if(s==="worklist"){
+    const anyAdded=activeLines().some(l=>l.addedToSummary);
+    f.innerHTML=wrap("Worklist",`<button class="btn btn-purplle btn-pill" data-act="goSummary" ${anyAdded?"":"disabled"}>Review summary <i class="bi bi-arrow-right ms-1"></i></button>`);
+  } else if(s==="summary"){
+    const sel=activeLines().filter(l=>l.addedToSummary&&l.selectedForGR&&!(l.gr&&l.gr.posted));
+    f.innerHTML=`<button class="btn btn-outline-secondary btn-pill" data-act="backWork"><i class="bi bi-arrow-left me-1"></i>Worklist</button>
+      <button class="btn btn-purplle btn-pill" data-act="submitGR" ${sel.length?"":"disabled"}>Submit ${sel.length} line(s) → SAP GR</button>`;
+  } else if(["identity","sample","receiving"].includes(s)){
+    f.innerHTML=`<button class="btn btn-outline-secondary btn-pill" data-act="backWork"><i class="bi bi-arrow-left me-1"></i>Back to worklist</button>`;
+  } else if(s==="intake"){
+    f.innerHTML=`<span class="note">Enter a consignment to begin</span>`;
+  }
+}
+
+/* ============================================================
+   SCREEN 0 — INTAKE
+   ============================================================ */
+function renderIntake(){
+  const opts=Object.entries(SCN).map(([k,v])=>`<option value="${k}">${k} — ${v.label}</option>`).join("");
+  ws().innerHTML=`
+   <div class="card card-soft mb-3"><div class="card-body">
+     <div class="sect-title mb-2">Screen 0 · Inbound intake</div>
+     <div class="row g-3 align-items-end">
+       <div class="col-md-3">
+         <label class="form-label small fw-semibold">Demo consignment</label>
+         <select class="form-select" id="scn">${opts}</select>
+       </div>
+       <div class="col-md-3">
+         <label class="form-label small fw-semibold">SAP PO number</label>
+         <div class="input-group scan"><span class="input-group-text"><i class="bi bi-hash"></i></span><input class="form-control" id="poIn"></div>
+       </div>
+       <div class="col-md-3">
+         <label class="form-label small fw-semibold">Invoice number</label>
+         <div class="input-group scan"><span class="input-group-text"><i class="bi bi-receipt"></i></span><input class="form-control" id="invIn"></div>
+       </div>
+       <div class="col-md-3">
+         <button class="btn btn-purplle w-100" id="validateBtn"><i class="bi bi-shield-check me-1"></i>Run validation</button>
+       </div>
+     </div>
+     <div id="intakeResult" class="mt-3"></div>
+   </div></div>`;
+  const fill=()=>{ const v=SCN[$("#scn").value]; $("#poIn").value=v.po; $("#invIn").value=v.invoice; $("#intakeResult").innerHTML=""; };
+  $("#scn").onchange=fill; fill();
+  $("#validateBtn").onclick=runIntakeValidation;
+}
+function chip(ok,label){ return `<div class="flag ${ok?"flag-ok":"flag-block"} me-2"><i class="bi bi-${ok?"check-circle":"x-circle"}"></i>${label}</div>`; }
+function runIntakeValidation(){
+  const key=$("#scn").value; const v=SCN[key];
+  SESSION={ scenarioKey:key, po:$("#poIn").value, invoice:$("#invIn").value, vendor:v.vendor, screen:"intake", currentLineId:null };
+  $("#refBadge").textContent=`PO ${SESSION.po} · ${v.vendor.name}`;
+  evalEligibility();
+  const gate1 = v.vendor.configured;
+  const sanity = `<div class="d-flex flex-wrap mb-2">${chip(true,"Invoice = Gate-IN")}${chip(true,"Vendor found")}${chip(true,"BU found")}${chip(true,"GSTN match")}${chip(true,"PO ↔ location")}</div>`;
+  const gate = `<div class="d-flex flex-wrap">${chip(gate1,"Vendor QR / Green-Channel config")}</div>`;
+  if(!gate1){
+    $("#intakeResult").innerHTML = sanity+gate+
+      `<div class="flag flag-block mt-2"><i class="bi bi-slash-circle"></i><b class="ms-1">Hard block at intake (FR-0.4).</b>&nbsp;Vendor config not maintained — cannot receive. Advise config setup, then retry.</div>`;
+    renderFooter(); return;
+  }
+  const lines=v.lines;
+  const invQty=lines.reduce((a,l)=>a+l.invoiceQty,0);
+  const boxes=lines.reduce((a,l)=>a+l.boxCount,0);
+  const gcCount=lines.filter(l=>l.eligible).length;
+  const qcCount=lines.length-gcCount;
+  $("#intakeResult").innerHTML = sanity+gate+
+    `<div class="row g-2 mt-1">
+      <div class="col-6 col-md-3"><div class="kpi"><div class="v">${invQty}</div><div class="l">Invoice qty</div></div></div>
+      <div class="col-6 col-md-3"><div class="kpi"><div class="v">${boxes}</div><div class="l">Box count</div></div></div>
+      <div class="col-6 col-md-3"><div class="kpi"><div class="v">${gcCount}</div><div class="l">Green-Channel SKUs</div></div></div>
+      <div class="col-6 col-md-3"><div class="kpi"><div class="v">${qcCount}</div><div class="l">QC-required SKUs</div></div></div>
+    </div>
+    <div class="text-end mt-3"><button class="btn btn-purplle btn-pill" data-act="initiateQC"><i class="bi bi-play-fill me-1"></i>Initiate QC</button></div>`;
+  renderFooter();
+}
+
+/* ============================================================
+   SCREEN 1 — WORKLIST
+   ============================================================ */
+function renderWorklist(){
+  evalEligibility();
+  const rows = ()=> {
+    const rank={"pending":0,"in-progress":1,"discrepancy":1,"qc-completed":2,"grn-completed":3};
+    const q=($("#wlSearch")&&$("#wlSearch").value||"").toLowerCase();
+    return activeLines()
+      .filter(l=>!q||l.desc.toLowerCase().includes(q)||l.ean.includes(q)||l.sku.toLowerCase().includes(q))
+      .sort((a,b)=>rank[a.qcStatus]-rank[b.qcStatus])
+      .map(l=>{
+        const elig = l.eligible?`<span class="pill badge-green"><i class="bi bi-lightning-charge"></i>Green-direct</span>`
+                               :`<span class="pill badge-phys"><i class="bi bi-search"></i>Physical QC</span>`;
+        const route = l.eligible?"→ Receiving": l.path==="physical-uid"?"→ Identity (UID-only)":"→ Identity";
+        const disabled = l.qcStatus==="grn-completed";
+        return `<tr>
+          <td><div class="d-flex align-items-center gap-2"><div class="prod-img" style="width:40px;height:40px;font-size:1rem">${l.img}</div>
+            <div><div class="fw-semibold" style="font-size:.86rem">${l.desc}</div><div class="note">${l.sku} · EAN ${l.ean}${l.candidates&&!l.chosen?' · <span class="text-warning fw-semibold">multi-SKU</span>':''}</div></div></div></td>
+          <td>${elig}<div class="note mt-1">score ${l.score}</div></td>
+          <td>${statusPill(l.qcStatus)}${l.escalated?'<div class="note text-danger mt-1">escalated 100%</div>':''}</td>
+          <td>${inwardPill(l.inwardStatus)}</td>
+          <td class="text-end"><button class="btn btn-sm ${l.qcStatus==="qc-completed"?"btn-outline-success":"btn-purplle"}" data-act="openLine" data-id="${l.id}" ${disabled?"disabled":""}>
+            ${l.qcStatus==="pending"?"Open "+route:l.qcStatus==="qc-completed"?"Review":l.qcStatus==="grn-completed"?"Done":"Resume"}</button></td>
+        </tr>`;
+      }).join("");
+  };
+  ws().innerHTML=`
+    <div class="card card-soft"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <div class="sect-title">Screen 1 · Worklist — ${activeLines().length} line(s)</div>
+        <div class="input-group scan" style="max-width:300px"><span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+          <input class="form-control" id="wlSearch" placeholder="Scan EAN / QR or search description…"></div>
+      </div>
+      <div class="table-responsive"><table class="table mb-0"><thead><tr>
+        <th>Line item</th><th>Eligibility (Gate 2)</th><th>QC status</th><th>Inward</th><th class="text-end">Action</th>
+      </tr></thead><tbody id="wlBody">${rows()}</tbody></table></div>
+      <div class="note mt-2"><i class="bi bi-info-circle me-1"></i>Green-direct lines skip Identity & Sample QC. Completed / GRN lines sink to the bottom (BRD 5.4).</div>
+    </div></div>`;
+  $("#wlSearch").oninput=()=>{ $("#wlBody").innerHTML=rows(); };
+}
+function openLine(id){
+  const l=getLine(id);
+  if(l.candidates && !l.chosen){ return showSkuModal(l); }
+  SESSION.currentLineId=id;
+  if(l.qcStatus==="pending") l.qcStatus="in-progress";
+  route(l.path==="green" ? "receiving" : "identity");
+}
+function showSkuModal(l){
+  $("#skuModalBody").innerHTML = `<p class="note">EAN ${l.ean} maps to multiple SKUs. Select the physical product to proceed (FR-1.4).</p>`+
+    l.candidates.map((c,i)=>`<div class="box-row d-flex justify-content-between align-items-center">
+      <div><div class="fw-semibold">${c.desc}</div><div class="note">${c.sku} · MRP ₹${c.mrp}</div></div>
+      <button class="btn btn-sm btn-purplle" data-act="pickSku" data-id="${l.id}" data-i="${i}">Select</button></div>`).join("");
+  new bootstrap.Modal("#skuModal").show();
+}
+function pickSku(id,i){
+  const l=getLine(id); const c=l.candidates[i];
+  l.sku=c.sku; l.desc=c.desc; l.masterMRP=c.mrp; l.invoiceMRP=c.mrp; l.chosen=true;
+  bootstrap.Modal.getInstance("#skuModal").hide();
+  SESSION.currentLineId=id; l.qcStatus="in-progress"; route("identity");
+}
+
+/* ============================================================
+   SCREEN 2 — IDENTITY (operator-keyed 3-way MRP)
+   ============================================================ */
+function renderIdentity(){
+  const l=getLine(SESSION.currentLineId);
+  ws().innerHTML=`
+   <div class="card card-soft"><div class="card-body">
+     <div class="sect-title mb-2">Screen 2 · Identity verification — ${l.sku}</div>
+     <div class="d-flex gap-3 flex-wrap">
+       <div class="prod-img">${l.img}</div>
+       <div class="flex-grow-1">
+         <div class="fw-semibold mb-1">${l.desc}</div>
+         <div class="row g-2 note">
+           <div class="col-6 col-md-3">EAN<br><b class="text-dark">${l.ean}</b></div>
+           <div class="col-6 col-md-3">Grammage<br><b class="text-dark">${l.desc.match(/\d+ml|\d+g/)?.[0]||"—"}</b></div>
+           <div class="col-6 col-md-3">PO / master MRP<br><b class="text-dark">₹${l.masterMRP}</b></div>
+           <div class="col-6 col-md-3">Invoice MRP (E42)<br><b class="text-dark">₹${l.invoiceMRP}</b></div>
+           <div class="col-6 col-md-3">PO qty<br><b class="text-dark">${l.poQty}</b></div>
+           <div class="col-6 col-md-3">Invoice qty<br><b class="text-dark">${l.invoiceQty}</b></div>
+         </div>
+       </div>
+     </div>
+     <hr>
+     <div class="row g-3 align-items-end">
+       <div class="col-md-4">
+         <label class="form-label small fw-semibold">Physical MRP (read off product)</label>
+         <div class="input-group"><span class="input-group-text">₹</span><input type="number" class="form-control" id="physMRP" value="${l.physicalMRP}" placeholder="key MRP"></div>
+       </div>
+       <div class="col-md-3"><button class="btn btn-purplle w-100" data-act="run3way"><i class="bi bi-diagram-3 me-1"></i>Run 3-way check</button></div>
+       <div class="col-md-5"><div class="note">Physical vs PO/master vs Invoice. MRP is identity-defining (0% tolerance).</div></div>
+     </div>
+     <div id="threeway" class="mt-3"></div>
+   </div></div>`;
+  if(l.flags.length) renderThreeWay(l);
+}
+function run3way(){
+  const l=getLine(SESSION.currentLineId);
+  const phys=parseFloat($("#physMRP").value);
+  if(isNaN(phys)){ toast("Enter the physical MRP","err"); return; }
+  l.physicalMRP=phys; l.flags=[]; l.rekeyConfirmed=false;
+  if(phys!==l.masterMRP){
+    l.flags.push({type:"block",code:"Incorrect SKU",text:`Physical ₹${phys} ≠ PO/master ₹${l.masterMRP} — wrong variant. Blocking; requires re-key confirmation.`});
+  } else if(l.invoiceMRP!==l.masterMRP){
+    l.flags.push({type:"block",code:"Physical × Invoice variance",text:`Physical = master ₹${l.masterMRP} but Invoice states ₹${l.invoiceMRP}. Blocking; correctable via revised invoice / E42, else RTV.`});
+  }
+  if(l.invoiceQty>l.poQty){
+    l.flags.push({type:"info",code:"PO–Invoice variance",text:`Invoice qty ${l.invoiceQty} > PO qty ${l.poQty}. Documentary, non-blocking auto-flag.`});
+  }
+  const blocking=l.flags.some(f=>f.type==="block");
+  l.qcStatus = blocking?"discrepancy":"in-progress";
+  renderThreeWay(l); renderRail();
+}
+function renderThreeWay(l){
+  const blocking=l.flags.filter(f=>f.type==="block");
+  const info=l.flags.filter(f=>f.type!=="block");
+  let html="";
+  if(!l.flags.length){ html=`<div class="flag flag-ok"><i class="bi bi-check-circle"></i>3-way match clean — Physical = Invoice = PO/master.</div>`; }
+  blocking.forEach(f=>html+=`<div class="flag flag-block"><i class="bi bi-exclamation-octagon"></i><b class="me-1">${f.code}:</b>${f.text}</div>`);
+  info.forEach(f=>html+=`<div class="flag flag-info"><i class="bi bi-info-circle"></i><b class="me-1">${f.code}:</b>${f.text}</div>`);
+  if(blocking.length){
+    html+=`<div class="mt-2 p-2" style="background:#fff8f8;border:1px solid #f3c8c8;border-radius:10px">
+      <div class="form-check"><input class="form-check-input" type="checkbox" id="rekey" ${l.rekeyConfirmed?"checked":""} data-act="rekeyToggle">
+        <label class="form-check-label small" for="rekey">I re-checked the product and confirm the keyed MRP (re-key confirmation, FR-2.4).</label></div>
+      <div class="mt-2 d-flex gap-2 flex-wrap">
+        <button class="btn btn-sm btn-outline-danger" data-act="markCorrection"><i class="bi bi-arrow-repeat me-1"></i>Hold for central correction</button>
+        <button class="btn btn-sm btn-outline-danger" data-act="markRTV"><i class="bi bi-box-arrow-up me-1"></i>Mark RTV</button>
+      </div></div>`;
+  }
+  const canProceed = !blocking.length;
+  html+=`<div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
+     <div class="form-check"><input class="form-check-input" type="checkbox" id="ftouch" ${l.firstTouch?"checked":""} data-act="ftouchToggle" ${canProceed?"":"disabled"}>
+       <label class="form-check-label small" for="ftouch">First-touch confirmed (image + description + MRP)</label></div>
+     <button class="btn btn-purplle btn-pill" data-act="toSample" ${canProceed?"":"disabled"}>Proceed to Sample QC <i class="bi bi-arrow-right ms-1"></i></button>
+   </div>`;
+  $("#threeway").innerHTML=html;
+}
+
+/* ============================================================
+   SCREEN 3 — SAMPLE QC
+   ============================================================ */
+function ensureSample(l){
+  l.sampleSize=sampleSizeFor(l);
+  // (re)build sampled boxes only if empty
+  if(l.boxes.filter(b=>b.sampled).length!==l.sampleSize){
+    l.boxes=l.boxes.filter(b=>!b.sampled); // keep non-sampled (none yet at this stage)
+    for(let i=0;i<l.sampleSize;i++){
+      l.boxes.unshift({uid:`UID-${l.sku}-S${i+1}`, sampled:true, scanned:false, batchRef:"", mfg:"", exp:"", boxQty:0, short:0, excess:0, damaged:0, rtv:0, labelFlag:"", images:0});
+    }
+  }
+}
+function renderSample(){
+  const l=getLine(SESSION.currentLineId);
+  ensureSample(l);
+  const qr = SESSION.vendor.qrEnabled;
+  const sampled=l.boxes.filter(b=>b.sampled);
+  const defRate = sampled.length? Math.round(100*sampled.filter(boxIsDefective).length/sampled.length):0;
+
+  let batchBlock="";
+  if(!qr){
+    batchBlock=`<div class="mb-3 p-3" style="background:#faf9fc;border:1px solid #eee;border-radius:12px">
+      <div class="sect-title mb-2">Batch declaration (UID-only vendor) — operator declared</div>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3"><label class="form-label small">Mfg date</label><input type="date" class="form-control" id="bMfg" value="${addMonths(-2)}"></div>
+        <div class="col-md-3"><label class="form-label small">Exp date</label><input type="date" class="form-control" id="bExp" value="${addMonths(16)}"></div>
+        <div class="col-md-3"><label class="form-label small">Vendor batch</label><input class="form-control" id="bVend" placeholder="e.g. VB-8841"></div>
+        <div class="col-md-3"><button class="btn btn-outline-purplle w-100" style="border-color:var(--purplle);color:var(--purplle)" data-act="addBatch"><i class="bi bi-plus-lg me-1"></i>Add batch</button></div>
+      </div>
+      <div class="mt-2 d-flex flex-wrap gap-2">${l.batches.map((b,i)=>`<span class="pill st-pending">${b.vend||"batch"} · ${b.exp} <i class="bi bi-x ms-1" data-act="delBatch" data-i="${i}" style="cursor:pointer"></i></span>`).join("")||'<span class="note">No batch declared yet.</span>'}</div>
+      <div class="note mt-2">Quantity & discrepancy are captured once at UID level on Screen 4 and shown read-only here (FR-3.3).</div>
+    </div>`;
+  }
+
+  const boxCards = sampled.map((b,i)=>sampleBoxCard(l,b,i,qr)).join("");
+  ws().innerHTML=`
+   <div class="card card-soft"><div class="card-body">
+     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+       <div class="sect-title">Screen 3 · Sample QC — ${l.sku}</div>
+       <div class="d-flex gap-2 align-items-center">
+         <span class="pill st-pending">Sample ${l.sampleSize} of ${l.boxCount} boxes (${CONFIG.samplePct}%, cap ${CONFIG.sampleCap})</span>
+         <span class="pill ${defRate>CONFIG.escalationPct?'st-disc':'st-qc'}">Defect ${defRate}%</span>
+       </div>
+     </div>
+     ${l.escalated?`<div class="flag flag-block mt-2"><i class="bi bi-arrow-up-right-circle"></i><b class="me-1">Escalated to 100% inspection (pre-GR).</b>Sample defect ${defRate}% &gt; ${CONFIG.escalationPct}% (FR-3.7). All ${l.boxCount} boxes must be inspected.</div>`:""}
+     ${batchBlock}
+     <div class="mt-2">${boxCards}</div>
+     <div class="mt-3 text-end">
+       <button class="btn btn-purplle btn-pill" data-act="toReceiving">Proceed to Receiving <i class="bi bi-arrow-right ms-1"></i></button>
+     </div>
+     <div class="note mt-2"><i class="bi bi-info-circle me-1"></i>Sampled boxes carry forward to Screen 4 and are never re-scanned (FR-3.8).</div>
+   </div></div>`;
+}
+function sampleBoxCard(l,b,i,qr){
+  const sal=saleableOf(b);
+  const labelOpts=["","Unreadable QR","MFG-EXP mismatch","Wrong vendor batch"].map(o=>`<option ${b.labelFlag===o?"selected":""}>${o||"— label ok —"}</option>`).join("");
+  return `<div class="box-row sampled" data-box="${b.uid}">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="fw-semibold"><i class="bi bi-box-seam me-1"></i>${b.uid} <span class="note">sample #${i+1}</span></div>
+      ${qr?`<button class="btn btn-sm ${b.scanned?'btn-outline-success':'btn-outline-purplle'}" style="${b.scanned?'':'border-color:var(--purplle);color:var(--purplle)'}" data-act="scanQR" data-uid="${b.uid}">
+        <i class="bi bi-qr-code-scan me-1"></i>${b.scanned?'QR read':'Scan QR'}</button>`:''}
+    </div>
+    ${qr&&b.scanned?`<div class="note mt-1">MFG ${b.mfg} · EXP ${b.exp} · Batch ${b.batchRef} · Box qty ${b.boxQty}</div>`:''}
+    ${(qr&&!b.scanned)?'<div class="note mt-1 text-warning">Scan QR to populate batch & box qty.</div>':`
+    <div class="row g-2 mt-1 align-items-end">
+      ${!qr?`<div class="col-6 col-md-2"><label class="form-label small mb-0">Box qty</label><input type="number" class="form-control form-control-sm mini" data-field="boxQty" data-uid="${b.uid}" value="${b.boxQty}"></div>`:''}
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">Short</label><input type="number" class="form-control form-control-sm mini" data-field="short" data-uid="${b.uid}" value="${b.short}"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">Excess</label><input type="number" class="form-control form-control-sm mini" data-field="excess" data-uid="${b.uid}" value="${b.excess}"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">Damaged</label><input type="number" class="form-control form-control-sm mini" data-field="damaged" data-uid="${b.uid}" value="${b.damaged}"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">RTV</label><input type="number" class="form-control form-control-sm mini" data-field="rtv" data-uid="${b.uid}" value="${b.rtv}"></div>
+      <div class="col-6 col-md-2"><div class="note">Saleable</div><div class="fw-bold text-success">${sal}</div></div>
+    </div>
+    ${qr?`<div class="row g-2 mt-1 align-items-center"><div class="col-md-4"><select class="form-select form-select-sm" data-field="labelFlag" data-uid="${b.uid}">${labelOpts}</select></div>
+      ${b.damaged>0?`<div class="col-md-8"><span class="note">Damage images:</span> ${[1,2,3].map(n=>`<i class="bi bi-image${n<=b.images?'-fill text-purplle':''}" data-act="addImg" data-uid="${b.uid}" style="cursor:pointer;font-size:1.1rem;margin:0 2px"></i>`).join("")} <span class="note">(max 3)</span></div>`:''}
+    </div>`:''}`}
+  </div>`;
+}
+function updateBox(uid,field,val){
+  const l=getLine(SESSION.currentLineId); const b=l.boxes.find(x=>x.uid===uid);
+  if(!b) return;
+  if(field==="labelFlag") b.labelFlag=val; else b[field]=Math.max(0,parseInt(val)||0);
+  // recompute escalation from sample
+  const sampled=l.boxes.filter(x=>x.sampled);
+  const defRate = sampled.length?100*sampled.filter(boxIsDefective).length/sampled.length:0;
+  const wasEsc=l.escalated; l.escalated = defRate>CONFIG.escalationPct;
+  if(l.escalated&&!wasEsc) toast(`Line escalated to 100% inspection (defect ${Math.round(defRate)}%)`,"err");
+  renderSample();
+}
+function scanQR(uid){
+  const l=getLine(SESSION.currentLineId); const b=l.boxes.find(x=>x.uid===uid);
+  b.scanned=true; b.batchRef="VB-"+(1000+Math.floor(Math.random()*9000)); b.mfg=addMonths(-2); b.exp=addMonths(16); b.boxQty=l.boxQty;
+  renderSample();
+}
+function addImg(uid){ const l=getLine(SESSION.currentLineId); const b=l.boxes.find(x=>x.uid===uid); if(b.images<3)b.images++; renderSample(); }
+
+/* ============================================================
+   SCREEN 4 — RECEIVING (box-level UID)
+   ============================================================ */
+function renderReceiving(){
+  const l=getLine(SESSION.currentLineId);
+  const qr = l.path==="green" || (SESSION.vendor.qrEnabled);
+  const uidOnly = !SESSION.vendor.qrEnabled;
+  const sampled=l.boxes.filter(b=>b.sampled);
+  const received=l.boxes.filter(b=>!b.sampled);
+  const done=l.boxes.length; const expected=l.boxCount;
+
+  const carried = sampled.length?`<div class="mb-2"><div class="sect-title mb-1">Carried from Sample QC (read-only)</div>
+     ${sampled.map(b=>`<div class="box-row sampled d-flex justify-content-between"><span><i class="bi bi-box-seam me-1"></i>${b.uid}</span>
+       <span class="note">qty ${b.boxQty} · saleable ${saleableOf(b)}</span></div>`).join("")}</div>`:"";
+
+  const recvRows = received.map(b=>receiveBoxCard(l,b,qr,uidOnly)).join("");
+  const batchSel = uidOnly?`<select class="form-select form-select-sm d-inline w-auto" id="recvBatch">${l.batches.length?l.batches.map((x,i)=>`<option value="${i}">${x.vend||'batch'} · ${x.exp}</option>`).join(""):'<option>declare batch on Screen 3</option>'}</select>`:'';
+
+  ws().innerHTML=`
+   <div class="card card-soft"><div class="card-body">
+     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+       <div class="sect-title">Screen 4 · Receiving — ${l.sku} ${l.path==="green"?'<span class="pill badge-green ms-1">Green-direct</span>':''}</div>
+       <span class="pill st-progress">${done} / ${expected} boxes</span>
+     </div>
+     ${carried}
+     <div class="d-flex align-items-center gap-2 my-2 flex-wrap">
+       <button class="btn btn-sm btn-purplle" data-act="scanBox"><i class="bi bi-upc-scan me-1"></i>${qr?'Scan QR + UID':'Scan UID'}</button>
+       ${uidOnly?`<span class="note">Batch:</span> ${batchSel}`:''}
+       <span class="note">${qr?'Box qty auto-populated from QR.':'UID-only — box qty entered manually, batch pinned.'}</span>
+     </div>
+     <div>${recvRows||'<div class="note">No boxes received yet — scan to begin.</div>'}</div>
+     <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+       <div class="blocker"><i class="bi bi-flag me-1"></i>Open blocker: multi-GR per line (PRD §17) — line may stay open after first Add-to-Summary. Modelled as provisional.</div>
+       <button class="btn btn-purplle btn-pill" data-act="addToSummary" ${done?'':'disabled'}>Add to summary <i class="bi bi-arrow-right ms-1"></i></button>
+     </div>
+   </div></div>`;
+}
+function receiveBoxCard(l,b,qr,uidOnly){
+  const sal=saleableOf(b);
+  return `<div class="box-row">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="fw-semibold"><i class="bi bi-box me-1"></i>${b.uid} ${b.batchRef?`<span class="note">· ${b.batchRef}</span>`:''}</div>
+      <div class="note">EXP <input type="date" class="form-control form-control-sm d-inline" style="width:150px" data-field="exp" data-uid="${b.uid}" value="${b.exp}"> <span class="ms-1">(edit to test freshness)</span></div>
+    </div>
+    <div class="row g-2 mt-1 align-items-end">
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">Box qty</label><input type="number" class="form-control form-control-sm mini" data-field="boxQty" data-uid="${b.uid}" value="${b.boxQty}" ${qr?'readonly':''}></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">Short</label><input type="number" class="form-control form-control-sm mini" data-field="short" data-uid="${b.uid}" value="${b.short}"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">Excess</label><input type="number" class="form-control form-control-sm mini" data-field="excess" data-uid="${b.uid}" value="${b.excess}"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">Damaged</label><input type="number" class="form-control form-control-sm mini" data-field="damaged" data-uid="${b.uid}" value="${b.damaged}"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-0">RTV</label><input type="number" class="form-control form-control-sm mini" data-field="rtv" data-uid="${b.uid}" value="${b.rtv}"></div>
+      <div class="col-6 col-md-2"><div class="note">Saleable</div><div class="fw-bold text-success">${sal}</div></div>
+    </div>
+  </div>`;
+}
+function scanBox(){
+  const l=getLine(SESSION.currentLineId);
+  const qr = l.path==="green" || SESSION.vendor.qrEnabled;
+  const received=l.boxes.filter(b=>!b.sampled);
+  if(l.boxes.length>=l.boxCount){ toast("All expected boxes already scanned","info"); return; }
+  const seq=received.length+1;
+  let batchRef="", exp=addMonths(16), mfg=addMonths(-2), boxQty=0;
+  if(qr){ batchRef="VB-"+(1000+Math.floor(Math.random()*9000)); boxQty=l.boxQty; }
+  else { const bi=$("#recvBatch")?parseInt($("#recvBatch").value):0; const bt=l.batches[bi]; if(bt){batchRef=bt.vend||"batch"; exp=bt.exp; mfg=bt.mfg;} boxQty=l.boxQty; }
+  l.boxes.push({uid:`UID-${l.sku}-R${seq}`, sampled:false, scanned:true, batchRef, mfg, exp, boxQty, short:0,excess:0,damaged:0,rtv:0, labelFlag:"", images:0});
+  renderReceiving();
+}
+function updateRecvBox(uid,field,val){
+  const l=getLine(SESSION.currentLineId); const b=l.boxes.find(x=>x.uid===uid);
+  if(field==="exp") b.exp=val; else b[field]=Math.max(0,parseInt(val)||0);
+  renderReceiving();
+}
+function addToSummary(){
+  const l=getLine(SESSION.currentLineId);
+  l.addedToSummary=true; l.qcStatus="qc-completed";
+  toast(`${l.sku} added to summary`,"ok");
+  route("worklist");
+}
+
+/* ============================================================
+   SUMMARY & GR  (+ post-GR: inward, freshness, audit)
+   ============================================================ */
+function renderSummary(){
+  const lines=activeLines().filter(l=>l.addedToSummary);
+  const rows=lines.map(l=>{
+    const t=lineTotals(l); const tickets=l.flags.filter(f=>f.type!=="info").length + l.boxes.filter(b=>b.labelFlag).length;
+    const posted=l.gr&&l.gr.posted;
+    return `<tr>
+      <td><input type="checkbox" class="form-check-input" data-act="selLine" data-id="${l.id}" ${l.selectedForGR?"checked":""} ${posted?"disabled":""}></td>
+      <td><div class="fw-semibold" style="font-size:.85rem">${l.sku}</div><div class="note">${l.desc}</div>
+          ${l.path==="green"?'<span class="pill badge-green mt-1">Green-direct</span>':''}${l.escalated?'<span class="pill st-disc mt-1">escalated</span>':''}</td>
+      <td>${l.invoiceQty}</td>
+      <td>${t.saleable+t.damaged+t.rtv}<div class="note">S ${t.short} · E ${t.excess} · Dmg ${t.damaged} · RTV ${t.rtv}</div></td>
+      <td>${tickets?`<span class="pill st-disc">${tickets}</span>`:'<span class="note">0</span>'}</td>
+      <td>${posted?inwardPill(l.inwardStatus):'<span class="note">ready</span>'}</td>
+      <td class="text-end">
+        <label class="note d-block"><input type="checkbox" data-act="forceErr" data-id="${l.id}" ${l.forceError?"checked":""} ${posted?"disabled":""}> force SAP error</label>
+        <span class="link-more" data-act="drill" data-id="${l.id}"><i class="bi bi-eye"></i> boxes</span>
+      </td></tr>
+      <tr class="hide" id="drill-${l.id}"><td colspan="7">${boxDetail(l)}</td></tr>`;
+  }).join("");
+  ws().innerHTML=`
+   <div class="card card-soft"><div class="card-body">
+     <div class="sect-title mb-2">Summary & GR — select lines to post (partial MIGO)</div>
+     <div class="table-responsive"><table class="table mb-0"><thead><tr>
+       <th style="width:34px"></th><th>Line</th><th>Invoiced</th><th>Received (GR)</th><th>Tickets</th><th>Inward status</th><th class="text-end">Detail</th>
+     </tr></thead><tbody>${rows||'<tr><td colspan="7" class="note">No lines added yet.</td></tr>'}</tbody></table></div>
+     <div id="grResult" class="mt-3"></div>
+     <div class="note mt-2"><i class="bi bi-info-circle me-1"></i>GR qty = Saleable + Damaged + RTV, split by disposition SLOC. Short/Excess netted, excluded from MIGO. Net excess capped at invoiced (received-not-billed).</div>
+   </div></div>`;
+  const errCards=lines.filter(l=>l.inwardStatus==="sap-error"&&!(l.gr&&l.gr.posted)).map(errCard).join("");
+  const doneCards=lines.filter(l=>l.gr&&l.gr.posted).map(grResultCard).join("");
+  $("#grResult").innerHTML=errCards+doneCards;
+}
+function errCard(l){
+  return `<div class="flag flag-block"><i class="bi bi-plug"></i><b class="me-1">SAP error — ${l.sku}:</b> MIGO rejected (SKU–SLOC–Plant extension). Box-code error file generated.
+    <button class="btn btn-sm btn-danger ms-2" data-act="repush" data-id="${l.id}"><i class="bi bi-arrow-clockwise me-1"></i>Apply &amp; Repush</button></div>`;
+}
+function boxDetail(l){
+  return `<div class="p-2">${l.boxes.map(b=>`<div class="box-row ${b.sampled?'sampled':''} d-flex justify-content-between flex-wrap">
+    <span><i class="bi bi-box-seam me-1"></i>${b.uid} ${b.sampled?'<span class="note">(sampled)</span>':''}</span>
+    <span class="note">qty ${b.boxQty} · sal ${saleableOf(b)} · dmg ${b.damaged} · rtv ${b.rtv} · exp ${b.exp||'—'}${b.labelFlag?' · '+b.labelFlag:''}</span>
+  </div>`).join("")}</div>`;
+}
+function submitGR(){
+  const sel=activeLines().filter(l=>l.addedToSummary&&l.selectedForGR&&!(l.gr&&l.gr.posted));
+  sel.forEach(l=>{
+    if(l.forceError){ l.gr={posted:false}; l.inwardStatus="sap-error"; return; }
+    postLineGR(l);
+  });
+  const errs=sel.filter(l=>l.forceError).length;
+  toast(`Posted ${sel.length-errs} line(s); ${errs} error(s)`, errs?"err":"ok");
+  renderSummary(); renderRail(); renderFooter();
+}
+function postLineGR(l){
+  const t=lineTotals(l);
+  // freshness per saleable box (reuse Freshness Check build): fail if days-to-exp < threshold
+  let freshFailQty=0, freshFailBoxes=[];
+  l.boxes.forEach(b=>{ const sal=saleableOf(b); if(sal>0 && b.exp){ const d=daysBetween(b.exp); if(d<CONFIG.freshnessDays){ freshFailQty+=sal; freshFailBoxes.push(b.uid);} } });
+  let saleable=t.saleable - freshFailQty;
+  // net excess cap
+  const receivedUnits=t.saleable+t.damaged+t.rtv;
+  let rnbFlag = (t.saleable>l.invoiceQty);
+  const disp={ TGDC:saleable, IWDC:0, DMDC:t.damaged, RVDC:t.rtv+freshFailQty };
+  const matdoc="49"+Math.floor(1000000+Math.random()*8999999);
+  l.gr={ posted:true, matdoc, disp, short:t.short, excess:t.excess, rnbFlag, freshFailQty, freshFailBoxes,
+         audit: l.path==="green" };
+  l.qcStatus="grn-completed";
+  l.inwardStatus = (saleable>0)?"rack-in":(freshFailQty>0?"gon-out":"inwarded");
+}
+function grResultCard(l){
+  const g=l.gr;
+  const tiles=[["TGDC",g.disp.TGDC,"d-tgdc","Saleable"],["IWDC",g.disp.IWDC,"d-iwdc","Cross-dock"],["DMDC",g.disp.DMDC,"d-dmdc","Damaged"],["RVDC",g.disp.RVDC,"d-rvdc","RTV"]]
+    .map(([s,q,c,lbl])=>`<div class="col-6 col-md-3"><div class="disp-tile ${c}"><div style="font-size:1.3rem;font-weight:700">${q}</div><div style="font-size:.7rem;opacity:.9">${s} · ${lbl}</div></div></div>`).join("");
+  return `<div class="p-3 mb-2" style="background:#faf9fc;border:1px solid #eee;border-radius:12px">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <div><b>${l.sku}</b> · GR posted <span class="note">Matdoc ${g.matdoc}</span></div>
+      <div>${inwardPill(l.inwardStatus)} ${g.audit?'<span class="pill badge-phys ms-1"><i class="bi bi-clipboard-check"></i> 100% audit ≤48h</span>':''}</div>
+    </div>
+    <div class="row g-2">${tiles}</div>
+    <div class="mt-2 d-flex flex-wrap gap-2">
+      ${g.short?`<span class="flag flag-warn">Short ${g.short} — netted, excluded from MIGO</span>`:''}
+      ${g.excess?`<span class="flag flag-warn">Excess ${g.excess} — netted${g.rnbFlag?', received-not-billed':''}</span>`:''}
+      ${g.freshFailQty?`<span class="flag flag-block"><i class="bi bi-calendar-x"></i> Freshness fail ${g.freshFailQty} → GON-out RTV (dummy inward-outward, gon_type ‘Return to Vendor’)</span>`:''}
+      ${l.inwardStatus==="rack-in"?'<span class="flag flag-ok"><i class="bi bi-check2-circle"></i> Boxes rack-in eligible</span>':''}
+    </div>
+    <div class="note mt-2">Auto-inward to IOL from Matdoc → freshness (NE) gate applied → disposition as above.</div>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN dispatcher + event delegation
+   ============================================================ */
+function renderScreen(){
+  const s=SESSION?SESSION.screen:"intake";
+  if(s==="intake") return renderIntake();
+  if(s==="worklist") return renderWorklist();
+  if(s==="identity") return renderIdentity();
+  if(s==="sample") return renderSample();
+  if(s==="receiving") return renderReceiving();
+  if(s==="summary") return renderSummary();
+}
+
+document.addEventListener("click",(e)=>{
+  const b=e.target.closest("[data-act]"); if(!b) return;
+  const act=b.dataset.act, id=b.dataset.id, uid=b.dataset.uid, i=b.dataset.i;
+  const l=SESSION&&SESSION.currentLineId?getLine(SESSION.currentLineId):null;
+  switch(act){
+    case "initiateQC": route("worklist"); break;
+    case "openLine": openLine(id); break;
+    case "pickSku": pickSku(id,parseInt(i)); break;
+    case "run3way": run3way(); break;
+    case "rekeyToggle": l.rekeyConfirmed=$("#rekey").checked; break;
+    case "ftouchToggle": l.firstTouch=$("#ftouch").checked; break;
+    case "markCorrection": l.qcStatus="discrepancy"; toast(`${l.sku} held for central correction`,"info"); route("worklist"); break;
+    case "markRTV": l.qcStatus="discrepancy"; l.inwardStatus=""; toast(`${l.sku} marked RTV`,"info"); route("worklist"); break;
+    case "toSample":
+      if(l.flags.some(f=>f.type==="block")){ toast("Clear the blocking flag first","err"); break; }
+      if(!$("#ftouch").checked){ toast("Confirm first-touch to proceed","err"); break; }
+      l.firstTouch=true; route("sample"); break;
+    case "scanQR": scanQR(uid); break;
+    case "addImg": addImg(uid); break;
+    case "addBatch": { const v={mfg:$("#bMfg").value,exp:$("#bExp").value,vend:$("#bVend").value}; if(!v.vend){toast("Enter vendor batch","err");break;} l.batches.push(v); renderSample(); } break;
+    case "delBatch": l.batches.splice(parseInt(i),1); renderSample(); break;
+    case "toReceiving": route("receiving"); break;
+    case "scanBox": scanBox(); break;
+    case "addToSummary": addToSummary(); break;
+    case "goSummary": case "backWork": route(act==="goSummary"?"summary":"worklist"); break;
+    case "drill": { const d=$("#drill-"+id); d.classList.toggle("hide"); } break;
+    case "selLine": getLine(id).selectedForGR=b.checked; renderFooter(); break;
+    case "forceErr": getLine(id).forceError=b.checked; break;
+    case "submitGR": submitGR(); break;
+    case "repush": { const ln=getLine(id); ln.forceError=false; postLineGR(ln); toast(`${ln.sku} repushed — GR posted`,"ok"); renderSummary(); renderRail(); renderFooter(); } break;
+  }
+});
+document.addEventListener("input",(e)=>{
+  const el=e.target; if(!el.dataset.field) return;
+  const uid=el.dataset.uid, field=el.dataset.field, val=el.value;
+  if(SESSION.screen==="sample") updateBox(uid,field,val);
+  else if(SESSION.screen==="receiving") updateRecvBox(uid,field,val);
+});
+
+/* config apply */
+$("#c_apply").onclick=()=>{
+  CONFIG.samplePct=+$("#c_samplePct").value||10;
+  CONFIG.sampleCap=+$("#c_sampleCap").value||5;
+  CONFIG.escalationPct=+$("#c_escalationPct").value||20;
+  CONFIG.freshnessDays=+$("#c_freshnessDays").value||90;
+  CONFIG.eligibility=+$("#c_eligibility").value||80;
+  evalEligibility();
+  toast("Configuration applied","ok");
+  bootstrap.Offcanvas.getInstance("#cfg")?.hide();
+  route();
+};
+
+/* boot */
+SCN=seedScenarios();
+SESSION={ scenarioKey:"A", po:"", invoice:"", vendor:null, screen:"intake", currentLineId:null };
+route("intake");
+</script>
+</body>
+</html>
+
+
